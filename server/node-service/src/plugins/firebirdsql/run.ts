@@ -27,16 +27,20 @@ function getFirebirdOptions(params: DataSourceDataType) {
 }
 
 export async function validateDataSourceConfig(dataSourceConfig: DataSourceDataType) {
+  let db;
   try {
-    let db = await fbdAsync.attachAsync(getFirebirdOptions(dataSourceConfig));
+    db = await fbdAsync.attachAsync(getFirebirdOptions(dataSourceConfig));
     promisifyAll(db);
     let result = await db.queryAsync("SELECT 1 FROM RDB$DATABASE;");
-    db.detachAsync();
     return {
       success: true,
     };
   } catch (e) {
     throw e;
+  } finally {
+    if (db) {
+      await db.detachAsync();
+    }
   }
 }
 
@@ -68,14 +72,20 @@ async function prepareQueryParameters(stmt: string, parameters: object) {
 
 export default async function run(action: ActionDataType, dataSourceConfig: DataSourceDataType, i18n: FirebirdI18nTranslator) {
   if (action.actionName === "Query") {
-    let db = await fbdAsync.attachAsync(getFirebirdOptions(dataSourceConfig));
-    promisifyAll(db);
+    let db;
+    try {
+      db = await fbdAsync.attachAsync(getFirebirdOptions(dataSourceConfig));
+      promisifyAll(db);
 
-    const { stmt, parametersArray } = await prepareQueryParameters(action.sql, action.params);
+      const { stmt, parametersArray } = await prepareQueryParameters(action.sql, action.params);
 
-    const results = await db.queryAsync(stmt, parametersArray);
+      const results = await db.queryAsync(stmt, parametersArray);
 
-    db.detachAsync();
-    return results;
+      return results;
+    } finally {
+      if (db) {
+        await db.detachAsync();
+      }
+    }
   }
 }
